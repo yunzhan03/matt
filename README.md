@@ -32,6 +32,22 @@ gh repo view --json nameWithOwner
 
 第二条应输出 `yunzhan03/matt`。不在仓库目录里运行 skills 时，配置不会生效。
 
+## 数据契约
+
+`src/alloydata/` 实现了第一条可执行链路：把一条记录（或一份 CSV）交给校验器，得到结构化错误，而不是靠人肉检查。
+
+```python
+from alloydata.validate import validate_record
+
+issues = validate_record(record)  # record 是 dict，字段契约见 src/alloydata/record.py
+```
+
+运行测试：
+
+```powershell
+python -m unittest discover -s tests
+```
+
 ## 现状
 
-仓库目前只有工作流配置与文档，还没有业务代码。
+已有工作流配置、文档，以及零依赖的记录校验器（21 个测试）；尚无真实数据与模型代码。
