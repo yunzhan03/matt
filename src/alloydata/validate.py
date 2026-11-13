@@ -63,6 +63,8 @@ def _validate_composition(composition, sum_tolerance: float) -> list[Issue]:
         return []
     if not isinstance(composition, Mapping):
         return [Issue("BAD_COMPOSITION", "composition", "composition must be a mapping of element to wt.%")]
+    if not composition:
+        return []
 
     issues: list[Issue] = []
     total = 0.0
@@ -86,7 +88,7 @@ def _validate_composition(composition, sum_tolerance: float) -> list[Issue]:
             Issue(
                 "COMPOSITION_SUM",
                 "composition",
-                f"composition sums to {total:.2f}, expected 100 ± {sum_tolerance}",
+                f"composition sums to {total:.2f}, expected 100 +/- {sum_tolerance}",
             )
         )
 

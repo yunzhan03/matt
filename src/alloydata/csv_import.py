@@ -56,7 +56,7 @@ def validate_csv(text: str, *, sum_tolerance: float = DEFAULT_SUM_TOLERANCE) -> 
         composition, composition_issue = parse_composition(record.get("composition") or "")
         if composition_issue is not None:
             issues.append(composition_issue)
-            record.pop("composition", None)
+            record["composition"] = {}
         else:
             record["composition"] = composition
 
