@@ -48,6 +48,19 @@ issues = validate_record(record)  # record 是 dict，字段契约见 src/alloyd
 python -m unittest discover -s tests
 ```
 
+## Cursor 桥接自检
+
+`tools/cursor-bridge-check.ps1` 按顺序检查五件事：桥接 `status.json`、代理端口、Cursor 的 `http.proxy`、本地根证书、Magpie 网关，一行一个结论，最后给 `VERDICT`。
+
+```powershell
+powershell -ExecutionPolicy Bypass -File tools\cursor-bridge-check.ps1
+powershell -ExecutionPolicy Bypass -File tools\cursor-bridge-check.ps1 -Fix
+```
+
+不加 `-Fix` 只读诊断；加 `-Fix` 会重跑插件 setup、必要时拉起 supervisor，然后复检。退出码 0 表示全绿，1 表示仍有失败项。
+
+已知失效点：`status.json` 停在 `disconnected`、`52407` 无监听、`http.proxy` 被还原——三者通常同时出现，说明后台 supervisor 没在跑，而 Magpie 界面会照旧显示「已接入」。
+
 ## 现状
 
 已有工作流配置、文档，以及零依赖的记录校验器（21 个测试）；尚无真实数据与模型代码。
