@@ -13,6 +13,9 @@
   Read-only by default. -Fix re-runs the plugin setup, starts the supervisor
   when it is missing, and re-checks.
 
+  Exit code 0 means every check passed after the run, 1 means something is
+  still failing (or Magpie itself is down, which this script cannot start).
+
 .EXAMPLE
   powershell -ExecutionPolicy Bypass -File tools\cursor-bridge-check.ps1
 
@@ -147,41 +150,53 @@ function Start-Supervisor {
     if (-not (Test-Path $runtime) -or -not (Test-Path $bridge)) {
         throw "runtime.exe or bridge.js missing under $($release.FullName)"
     }
-    Start-Process -FilePath $runtime -ArgumentList "`"$bridge`"", 'supervise' -WindowStyle Hidden
-    "started supervisor from $($release.Name)"
+    $proc = Start-Process -FilePath $runtime -ArgumentList "`"$bridge`"", 'supervise' -WindowStyle Hidden -PassThru
+    "started supervisor from $($release.Name) (pid $($proc.Id))"
+}
+
+function Get-BridgeFailures {
+    @($results | Where-Object { $_.State -eq 'FAIL' -and $_.Step -notlike 'magpie*' })
 }
 
 $proxyPort = Invoke-Checks
 Show-Results
 
 if ($Fix) {
-    $status = Get-Status
-    $needsFix = ($status.state -ne 'connected') -or (-not (Test-Port (Get-ProxyPort $status)))
-    if (-not $needsFix) {
+    $bridgeFailures = Get-BridgeFailures
+    if ($bridgeFailures.Count -eq 0) {
         'Nothing to fix.'
-        exit 0
     }
-
-    if (Test-Path (Join-Path $pluginDir 'setup.ps1')) {
-        "running plugin setup..."
-        & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $pluginDir 'setup.ps1') | Out-Host
+    elseif (-not (Test-Port $gatewayPort)) {
+        'Magpie gateway :3425 is down. Start Magpie, wait for it to finish loading, then re-run this script.'
     }
+    else {
+        if (Test-Path (Join-Path $pluginDir 'setup.ps1')) {
+            "running plugin setup..."
+            & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $pluginDir 'setup.ps1') | Out-Host
+        }
 
-    Start-Sleep -Seconds 3
-    if (-not (Test-Port $defaultProxyPort)) {
-        Start-Supervisor
-    }
-
-    for ($i = 0; $i -lt 12; $i++) {
-        Start-Sleep -Seconds 2
+        Start-Sleep -Seconds 3
         $status = Get-Status
-        if ($status -and $status.state -eq 'connected' -and (Test-Port (Get-ProxyPort $status))) { break }
-    }
+        if (-not (Test-Port (Get-ProxyPort $status))) {
+            Start-Supervisor
+        }
 
-    ''
-    'After fix:'
-    $proxyPort = Invoke-Checks
-    Show-Results
+        for ($i = 0; $i -lt 12; $i++) {
+            Start-Sleep -Seconds 2
+            $status = Get-Status
+            if ($status -and $status.state -eq 'connected' -and (Test-Port (Get-ProxyPort $status))) { break }
+        }
+
+        ''
+        'After fix:'
+        $proxyPort = Invoke-Checks
+        Show-Results
+
+        if (@(Get-BridgeFailures).Count -gt 0) {
+            ''
+            'Still failing: in Cursor run "Developer: Reload Window" (the proxy key is read at startup), then re-run this script.'
+        }
+    }
 }
 
 $final = @($results | Where-Object { $_.State -eq 'FAIL' })

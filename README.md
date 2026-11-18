@@ -48,16 +48,31 @@ issues = validate_record(record)  # record 是 dict，字段契约见 src/alloyd
 python -m unittest discover -s tests
 ```
 
-## Cursor 桥接自检
+## Cursor 桥接：一条命令自检与恢复
 
-`tools/cursor-bridge-check.ps1` 按顺序检查五件事：桥接 `status.json`、代理端口、Cursor 的 `http.proxy`、本地根证书、Magpie 网关，一行一个结论，最后给 `VERDICT`。
+模型下拉框还在、但请求走不通时，先跑这条命令。默认就是「诊断 → 修复 → 复检」：
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File tools\cursor-bridge-check.ps1
-powershell -ExecutionPolicy Bypass -File tools\cursor-bridge-check.ps1 -Fix
+.\tools\bridge.cmd
 ```
 
-不加 `-Fix` 只读诊断；加 `-Fix` 会重跑插件 setup、必要时拉起 supervisor，然后复检。退出码 0 表示全绿，1 表示仍有失败项。
+只看状态、不动系统：
+
+```powershell
+.\tools\bridge.cmd check
+```
+
+脚本等价于 `tools\cursor-bridge-check.ps1 -Fix`，依次检查五件事：桥接 `status.json`、代理端口（默认 `52407`）、Cursor 的 `http.proxy`、本地根证书、Magpie 网关（`3425`），一行一个结论，最后给 `VERDICT`。
+
+断线时它按这个顺序恢复：
+
+1. `status.json` 的 `state` 不是 `connected`，或代理端口没有监听 → 判定为断线。
+2. `3425` 也不通 → 直接告诉你先启动 Magpie，不浪费时间重装桥接。
+3. 重跑插件 `setup.ps1`（拉取最新 release）。
+4. 端口仍无监听 → 手动拉起 `runtime.exe bridge.js supervise`，并打印 pid。
+5. 最多等 24 秒等到 `state=connected` 且端口监听，然后复检并给最终 `VERDICT`。
+
+退出码 `0` 表示复检全绿，`1` 表示仍有失败项。若只剩 Cursor 设置项失败，在 Cursor 里执行 `Developer: Reload Window`（`http.proxy` 只在启动时读取）后重跑。
 
 已知失效点：`status.json` 停在 `disconnected`、`52407` 无监听、`http.proxy` 被还原——三者通常同时出现，说明后台 supervisor 没在跑，而 Magpie 界面会照旧显示「已接入」。
 
